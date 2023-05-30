@@ -29,55 +29,7 @@ class LogisticRegressionGD(object):
         # iterations history
         self.Js = []
         self.thetas = []
-
-    """
-    def HX(self, X):
-        HxDenominator=1+np.power(np.e,-1*np.dot(self.theta.T,X))
-        Hx=1/HxDenominator
-        return Hx
-    
-    def GX(self,X,y):
-        value=-y*np.log(self.HX(X))-(1-y)*np.log(1-self.HX(X))
-        return value/len(X)
-
-
-    def fit(self, X, y):
-        
-        Fit training data (the learning phase).
-        Update the theta vector in each iteration using gradient descent.
-        Store the theta vector in self.thetas.
-        Stop the function when the difference between the previous cost and the current is less than eps
-        or when you reach n_iter.
-        The learned parameters must be saved in self.theta.
-        This function has no return value.
-
-        Parameters
-        ----------
-        X : {array-like}, shape = [n_examples, n_features]
-          Training vectors, where n_examples is the number of examples and
-          n_features is the number of features.
-        y : array-like, shape = [n_examples]
-          Target values.
-       
-        
-        # set random seed
-        np.random.seed(self.random_state)
-        ones_cols = np.ones((X.shape[0]))
-        result = np.column_stack((X, ones_cols)).T
-        ###########################################################################
-        # TODO: Implement the function.                                           #
-        ###########################################################################
-        self.theta= np.zeros(len(X.T)+1) #np.random.random(size=len(result))
-        
-        for i in range(self.n_iter):
-         loss = self.GX(result, y)
-         gradient = np.dot(result, loss)
-         self.theta = self.theta - self.eta * gradient
-         self.thetas.append(self.theta.copy())
-         self.Js.append(np.sum(self.GX(result, y),axis=0))
-         if i > 0 and (self.Js[i-1]-self.Js[i-1]) < self.eps:
-            break
-      """ 
+ 
     def sigmoid(self, X):
       
 
@@ -123,18 +75,8 @@ class LogisticRegressionGD(object):
           self.thetas.append(self.theta)
           self.Js.append(self.cost_function(new_data,y))
           if i > 0 and (self.Js[-2] - self.Js[-1] < self.eps): # Checking if the loss value is less than (1e-8), if true -> break, else continue.
-            break
-    
+            break 
 
-         
-            
-        ###########################################################################
-        #                             END OF YOUR CODE                            #
-        ###########################################################################
-
-
-    
-    
     def predict(self, X):
         """
         Return the predicted class labels for a given instance.
@@ -142,21 +84,14 @@ class LogisticRegressionGD(object):
         ----------
         X : {array-like}, shape = [n_examples, n_features]
         """
-        preds = None
-        ones_cols = np.ones((X.shape[0]))
-        result = np.column_stack((X, ones_cols))
-        ###########################################################################
-        # TODO: Implement the function.                                           #
-        ###########################################################################
-        preds=np.dot(result,self.theta)
-        for i in range (len(preds)):
-          if preds[i]<=0.5:
-            preds[i]=0
+        preds = []
+        new_data = np.c_[np.ones((X.shape[0],1)),X]
+        x = self.sigmoid(new_data)
+        for i in x:
+          if i > 0.5:
+            preds.append(1)
           else:
-            preds[i]=1
-        ###########################################################################
-        #                             END OF YOUR CODE                            #
-        ###########################################################################
+            preds.append(0)
         return preds
 
 def cross_validation(X, y, folds, algo, random_state):
@@ -184,58 +119,39 @@ def cross_validation(X, y, folds, algo, random_state):
     """
 
     cv_accuracy = None
-    
+    accurencies = []
     # set random seed
     np.random.seed(random_state)
-
-    ###########################################################################
-    # TODO: Implement the function.                                           #
-    ###########################################################################
-        # Shuffle the data
-    cv_accuracy = None
-
-    # Set random seed
-    np.random.seed(random_state)
-
-    # Shuffle the indices
     indices = np.arange(len(X))
     np.random.shuffle(indices)
+    X = X[indices]
+    y = y[indices]
+    
+    fold_size = len(X) // 5
 
-    # Split indices into folds
-    fold_indices = np.array_split(indices, folds)
-
-    accuracies = []
-
-    # Perform cross validation
-    for i in range(folds):
-        # Get the training indices by concatenating all other fold indices
-        train_indices = np.concatenate([fold_indices[j] for j in range(folds) if j != i])
-
-        # Get the validation indices for the current fold
-        val_indices = fold_indices[i]
-
-        # Split data into train and validation sets
-        X_train, y_train = X[train_indices], y[train_indices]
-        X_val, y_val = X[val_indices], y[val_indices]
-
-        # Train the model on the training set
-        algo.fit(X_train, y_train)
-
-        # Predict the validation set
-        y_pred = algo.predict(X_val)
-
-        # Calculate accuracy on the validation set
-        accuracy = np.mean(y_pred == y_val)
-        accuracies.append(accuracy)
-
-    # Calculate the cross-validation accuracy as the mean of individual fold accuracies
-    cv_accuracy = np.mean(accuracies)
-
-   
-
-    ###########################################################################
-    #                             END OF YOUR CODE                            #
-    ###########################################################################
+    # Step 3: Assign samples to each fold
+    foldsX = []
+    foldsy = []
+    start_idx = 0
+    for _ in range(5):
+      folds = X[start_idx : start_idx + fold_size]
+      foldsX.append(folds)
+      folds = y[start_idx : start_idx + fold_size]
+      foldsy.append(folds)
+      start_idx += fold_size
+    
+    for i in range(5):
+      indices = [j for j in range(5) if j != i]  # Indices of folds to concatenate
+      X_train = np.concatenate([foldsX[j] for j in indices])
+      y_train = np.concatenate([foldsy[j] for j in indices])
+      X_val = foldsX[i]
+      y_val = foldsy[i]
+      algo.fit(X_train,y_train)
+      y_pred = algo.predict(X_val)
+      accuracy = np.mean(y_pred == y_val)
+      accurencies.append(accuracy)
+    
+    cv_accuracy = np.mean(accurencies)   
     return cv_accuracy
     
     
@@ -386,7 +302,7 @@ class EM(object):
             # Weight the probability by the cluster weight
             weighted_prob = weight * gaussian_prob
             
-            costPerSample-=np.log(weighted_prob)
+            costPerSample+=np.log(weighted_prob)
 
             # Accumulate the likelihood
          cost += np.log(costPerSample)
