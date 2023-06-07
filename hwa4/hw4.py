@@ -172,8 +172,9 @@ def norm_pdf(data, mu, sigma):
     ###########################################################################
     # TODO: Implement the function.                                           #
     ###########################################################################
-    coefficient = 1 / (sigma * np.sqrt(2 * np.pi))
-    exponent = -0.5 * ((data - mu) / sigma) ** 2
+    sigma2=np.diag(sigma)
+    coefficient = 1 / (np.sqrt(2 * np.pi) * sigma2)
+    exponent = -0.5 * ((data - mu) / sigma2) ** 2
     p = coefficient * np.exp(exponent)
     ###########################################################################
     #                             END OF YOUR CODE                            #
@@ -249,7 +250,7 @@ class EM(object):
           probabilty=norm_pdf(data,mu,sigma)
           probabilty = np.squeeze(probabilty)
           weight=self.weights[g]
-          responsibilities[:, g] = weight*probabilty
+          responsibilities[:, g] = weight * np.prod(probabilty, axis=1)
 
         sum_responsibilities = np.sum(responsibilities, axis=1, keepdims=True)
         responsibilities /= sum_responsibilities
@@ -331,7 +332,7 @@ class EM(object):
           self.expectation(data)
           self.maximization(data)
           self.costs.append(self.costFunction(data))
-          if i > 0 and (self.costs[-2] - self.costs[-1] < self.eps): 
+          if i > 0 and np.all(self.costs[-2] - self.costs[-1] < self.eps): 
             break  
         ###########################################################################
         #                             END OF YOUR CODE                            #
@@ -459,6 +460,16 @@ class NaiveBayesGaussian(object):
         ###########################################################################
         return preds
 
+
+def calculate_accuracy(y_test, y_pred):
+   num_matching = np.sum(y_test == y_pred)
+   # Calculate the total number of elements
+   total_elements = y_test.shape[0]
+   accuracy = (num_matching / total_elements)
+   return accuracy
+
+
+
 def model_evaluation(x_train, y_train, x_test, y_test, k, best_eta, best_eps):
     ''' 
     Read the full description of this function in the notebook.
@@ -496,19 +507,20 @@ def model_evaluation(x_train, y_train, x_test, y_test, k, best_eta, best_eps):
     lor_model = LogisticRegressionGD(random_state=0,eta=best_eta)
     lor_model.fit(x_train, y_train)
 
-    lor_train_acc = lor_model.predict(x_train)
-    lor_test_acc = lor_model.predict(x_test)
+    lor_train_acc = calculate_accuracy(y_train,lor_model.predict(x_train))
+    lor_test_acc = calculate_accuracy(y_test,lor_model.predict(x_test))
 
     # Naive Bayes with Gaussian Mixture Model
     em=EM(k=k, eps=best_eps)
-    weights,mus,sigmas=em.fit(x_train)
+    em.fit(x_train)
+    weights,mus,sigmas=em.get_dist_params()
     gnb = NaiveBayesGaussian()
     gnb.mus=mus
     gnb.sigmas=sigmas
     gnb.weights=weights
-    gnb.fit(y_train)
-    bayes_train_acc = gnb.predict(x_train)
-    bayes_test_acc = gnb.predict(x_test)
+    gnb.fit(x_train, y_train)
+    bayes_train_acc =calculate_accuracy(y_train, gnb.predict(x_train))
+    bayes_test_acc =calculate_accuracy(y_test, gnb.predict(x_test))
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
