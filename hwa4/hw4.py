@@ -281,7 +281,8 @@ class EM(object):
           diff = data - self.mus[j]
           weighted_diff = self.responsibilities[:, j][:, np.newaxis] * diff
           self.sigmas[j] = np.dot(weighted_diff.T, diff) / sum_responsibilities[j]
-
+          self.sigmas[j] = np.sqrt(np.diag(self.sigmas[j]))
+        
         ###########################################################################
         #                             END OF YOUR CODE                            #
         ###########################################################################
@@ -302,7 +303,7 @@ class EM(object):
             # Weight the probability by the cluster weight
             weighted_prob = weight * gaussian_prob
             
-            costPerSample+=np.log(weighted_prob)
+            costPerSample-=np.log(weighted_prob)
 
             # Accumulate the likelihood
          cost += np.log(costPerSample)
@@ -357,11 +358,16 @@ def gmm_pdf(data, weights, mus, sigmas):
     ###########################################################################
     # TODO: Implement the function.                                           #
     ###########################################################################
-    pdf = np.zeros_like(data)
-    
+    n_examples, n_features = data.shape
+    pdf = np.zeros(n_examples)
+
     for weight, mu, sigma in zip(weights, mus, sigmas):
-        gaussian_pdf = weight * (1 / (np.sqrt(2 * np.pi * sigma**2))) * np.exp(-0.5 * ((data - mu)**2) / (sigma**2))
-        pdf += gaussian_pdf
+        inv_sigma = np.linalg.inv(sigma)
+        det_sigma = np.linalg.det(sigma)
+        diff = data - mu
+        exponent = -0.5 * np.sum(np.dot(diff, inv_sigma) * diff, axis=1)
+        gaussian_pdf = (1 / np.sqrt((2 * np.pi)**n_features * det_sigma)) * np.exp(exponent)
+        pdf += weight * gaussian_pdf
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -383,6 +389,9 @@ class NaiveBayesGaussian(object):
         self.k = k
         self.random_state = random_state
         self.prior = None
+        self.weights = None
+        self.mus = None
+        self.sigmas = None
 
     def fit(self, X, y):
         """
@@ -399,7 +408,25 @@ class NaiveBayesGaussian(object):
         ###########################################################################
         # TODO: Implement the function.                                           #
         ###########################################################################
-        pass
+        np.random.seed(self.random_state)
+    
+        # Calculate prior probabilities
+        classes, counts = np.unique(y, return_counts=True)
+        self.prior = counts / len(y)
+    
+        # Calculate likelihood parameters using gmm_pdf
+        self.weights = []
+        self.mus = []
+        self.sigmas = []
+        for c in classes:
+          class_indices = np.where(y == c)[0]
+          class_features = X[class_indices]
+          class_weights = len(class_indices) / len(y)
+          class_mu = np.mean(class_features, axis=0)
+          class_sigma = np.cov(class_features.T, bias=True)  # Add bias=True to get (n_features, n_features) shape
+          self.weights.append(class_weights)
+          self.mus.append(class_mu)
+          self.sigmas.append(class_sigma)
         ###########################################################################
         #                             END OF YOUR CODE                            #
         ###########################################################################
@@ -415,7 +442,18 @@ class NaiveBayesGaussian(object):
         ###########################################################################
         # TODO: Implement the function.                                           #
         ###########################################################################
-        pass
+        y_pred = []
+        for x in X:
+            class_scores = []
+            for i in range(len(self.weights)):
+                weight = self.weights[i]
+                mu = self.mus[i]
+                sigma = self.sigmas[i]
+                likelihood = gmm_pdf(np.array([x]), [weight], [mu], [sigma])
+                class_scores.append(self.prior[i] * likelihood[0])
+            predicted_class = np.argmax(class_scores)
+            y_pred.append(predicted_class)
+        preds= np.array(y_pred)
         ###########################################################################
         #                             END OF YOUR CODE                            #
         ###########################################################################
@@ -454,10 +492,27 @@ def model_evaluation(x_train, y_train, x_test, y_test, k, best_eta, best_eps):
     ###########################################################################
     # TODO: Implement the function.                                           #
     ###########################################################################
-    pass
+    
+    lor_model = LogisticRegressionGD(random_state=0,eta=best_eta)
+    lor_model.fit(x_train, y_train)
+
+    lor_train_acc = lor_model.predict(x_train)
+    lor_test_acc = lor_model.predict(x_test)
+
+    # Naive Bayes with Gaussian Mixture Model
+    em=EM(k=k, eps=best_eps)
+    weights,mus,sigmas=em.fit(x_train)
+    gnb = NaiveBayesGaussian()
+    gnb.mus=mus
+    gnb.sigmas=sigmas
+    gnb.weights=weights
+    gnb.fit(y_train)
+    bayes_train_acc = gnb.predict(x_train)
+    bayes_test_acc = gnb.predict(x_test)
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
+    
     return {'lor_train_acc': lor_train_acc,
             'lor_test_acc': lor_test_acc,
             'bayes_train_acc': bayes_train_acc,
